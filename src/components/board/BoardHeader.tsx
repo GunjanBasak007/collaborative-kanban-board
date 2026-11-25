@@ -1,0 +1,38 @@
+type BoardHeaderProps = {
+  totalTasks: number;
+  onCreateClick: () => void;
+};
+
+const BoardHeader = ({
+  totalTasks,
+  onCreateClick,
+}: BoardHeaderProps) => {
+  return (
+    <header className="board-header">
+      <div>
+        <span className="board-eyebrow">
+          PROJECT MANAGEMENT
+        </span>
+
+        <h1>My Kanban Board</h1>
+
+        <p>Organize your work and track your progress.</p>
+      </div>
+
+      <div className="header-actions">
+        <div className="board-total">
+          {totalTasks} tasks
+        </div>
+
+        <button
+          className="create-task-button"
+          onClick={onCreateClick}
+        >
+          + Create Task
+        </button>
+      </div>
+    </header>
+  );
+};
+
+export default BoardHeader;
