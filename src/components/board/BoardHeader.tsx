@@ -8,30 +8,51 @@ const BoardHeader = ({
   onCreateClick,
 }: BoardHeaderProps) => {
   return (
-    <header className="board-header">
-      <div>
-        <span className="board-eyebrow">
-          PROJECT MANAGEMENT
-        </span>
+    <>
+      {/* BRAND BAR */}
+      <div className="brand-bar">
+        <div className="brand-lockup">
+          <img
+            src="/favicon.svg"
+            alt="KanbanFlow logo"
+            className="brand-mark"
+          />
 
-        <h1>My Kanban Board</h1>
-
-        <p>Organize your work and track your progress.</p>
+          <span className="brand-wordmark">
+            Kanban<span>Flow</span>
+          </span>
+        </div>
       </div>
 
-      <div className="header-actions">
-        <div className="board-total">
-          {totalTasks} tasks
+      {/* BOARD HEADER */}
+      <header className="board-header">
+        <div>
+          <span className="board-eyebrow">
+            PROJECT MANAGEMENT
+          </span>
+
+          <h1>My Kanban Board</h1>
+
+          <p>
+            Organize your work, collaborate in real time,
+            and track your progress.
+          </p>
         </div>
 
-        <button
-          className="create-task-button"
-          onClick={onCreateClick}
-        >
-          + Create Task
-        </button>
-      </div>
-    </header>
+        <div className="header-actions">
+          <div className="board-total">
+            {totalTasks} tasks
+          </div>
+
+          <button
+            className="create-task-button"
+            onClick={onCreateClick}
+          >
+            + Create Task
+          </button>
+        </div>
+      </header>
+    </>
   );
 };
 

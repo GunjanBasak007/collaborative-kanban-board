@@ -1,4 +1,6 @@
+
 import { useState, type FormEvent } from "react";
+import { Trash2, AlertTriangle } from "lucide-react";
 
 import {
   TASK_STATUSES,
@@ -32,6 +34,8 @@ const TaskDetailsModal = ({
   const [assignee, setAssignee] = useState(task.assignee);
   const [status, setStatus] = useState<TaskStatus>(task.status);
 
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -47,13 +51,12 @@ const TaskDetailsModal = ({
   };
 
   const handleDelete = () => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${task.title}"?`
-    );
+    setIsDeleteConfirmOpen(true);
+  };
 
-    if (confirmed) {
-      onDelete(task.id);
-    }
+  const handleConfirmDelete = () => {
+    setIsDeleteConfirmOpen(false);
+    onDelete(task.id);
   };
 
   return (
@@ -147,6 +150,7 @@ const TaskDetailsModal = ({
               className="delete-button"
               onClick={handleDelete}
             >
+              <Trash2 size={15} />
               Delete Task
             </button>
 
@@ -166,6 +170,60 @@ const TaskDetailsModal = ({
           </div>
         </form>
       </div>
+
+      {/* CUSTOM DELETE CONFIRMATION */}
+      {isDeleteConfirmOpen && (
+        <div
+          className="delete-confirm-backdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsDeleteConfirmOpen(false);
+            }
+          }}
+        >
+          <div
+            className="delete-confirm-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-confirm-title"
+            aria-describedby="delete-confirm-description"
+          >
+            <div className="delete-confirm-icon">
+              <AlertTriangle size={23} />
+            </div>
+
+            <h3 id="delete-confirm-title">
+              Delete this task?
+            </h3>
+
+            <p id="delete-confirm-description">
+              Are you sure you want to delete{" "}
+              <strong>"{task.title}"</strong>?
+              This action cannot be undone.
+            </p>
+
+            <div className="delete-confirm-actions">
+              <button
+                type="button"
+                className="delete-confirm-cancel"
+                onClick={() => setIsDeleteConfirmOpen(false)}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="delete-confirm-action"
+                onClick={handleConfirmDelete}
+                autoFocus
+              >
+                <Trash2 size={15} />
+                Delete Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -243,4 +243,4 @@ The core assignment requirements have been implemented:
 
 ## AI Assistance
 
-ChatGPT was used as a development assistant for implementation guidance, debugging, architecture discussions, and understanding concepts during development. Code was reviewed, integrated, and tested as part of the implementation process.
+ChatGPT was used as a development assistant for implementation guidance, debugging and understanding concepts during development. Code was reviewed, integrated, and tested as part of the implementation process.

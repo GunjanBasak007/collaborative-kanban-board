@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 
 import {
@@ -15,18 +16,20 @@ type CreateTaskInput = Omit<
 type CreateTaskModalProps = {
   onClose: () => void;
   onCreate: (task: CreateTaskInput) => void;
+  initialStatus: TaskStatus;
 };
 
 const CreateTaskModal = ({
   onClose,
   onCreate,
+  initialStatus,
 }: CreateTaskModalProps) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] =
     useState<TaskPriority>("medium");
   const [assignee, setAssignee] = useState("");
-  const [status, setStatus] = useState<TaskStatus>("Backlog");
+  const [status, setStatus] = useState<TaskStatus>(initialStatus);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -43,9 +46,12 @@ const CreateTaskModal = ({
   };
 
   return (
-    <div className="modal-overlay" onMouseDown={(e) => {
-      if (e.target === e.currentTarget) onClose();
-    }}>
+    <div
+      className="modal-overlay"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="task-modal">
         <div className="modal-header">
           <div>

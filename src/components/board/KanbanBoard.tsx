@@ -91,6 +91,19 @@ const KanbanBoard = () => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  // Default status for task creation
+  const [createTaskStatus, setCreateTaskStatus] =
+    useState<TaskStatus>("Backlog");
+
+  // OPEN CREATE MODAL WITH SELECTED COLUMN STATUS
+  const openCreateModal = (
+    status: TaskStatus = "Backlog"
+  ) => {
+    isInteractingRef.current = true;
+    setCreateTaskStatus(status);
+    setIsCreateModalOpen(true);
+  };
+
   // FILTER TASKS
   const filteredTasks = tasks.filter((task) => {
     const matchesSearch = task.title
@@ -173,10 +186,12 @@ const KanbanBoard = () => {
     void flushPendingEvents();
   };
 
+  // LOADING STATE
   if (isLoading) {
     return <div className="board-message">Loading board...</div>;
   }
 
+  // ERROR STATE
   if (isError) {
     return (
       <div className="board-message error">
@@ -296,8 +311,7 @@ const KanbanBoard = () => {
         } catch (error) {
           console.error("Failed to persist task movement:", error);
 
-          // Restore the original board and then reconcile with
-          // the authoritative database state.
+          // Restore original board and reconcile with database
           queryClient.setQueryData<Task[]>(
             ["board"],
             dragSnapshot.current
@@ -320,10 +334,7 @@ const KanbanBoard = () => {
           {/* BOARD HEADER */}
           <BoardHeader
             totalTasks={tasks.length}
-            onCreateClick={() => {
-              isInteractingRef.current = true;
-              setIsCreateModalOpen(true);
-            }}
+            onCreateClick={() => openCreateModal("Backlog")}
           />
 
           {/* SEARCH AND FILTERS */}
@@ -378,6 +389,7 @@ const KanbanBoard = () => {
                     isInteractingRef.current = true;
                     setSelectedTask(task);
                   }}
+                  onAddTask={() => openCreateModal(status)}
                   isFiltering={isFiltering}
                 />
               );
@@ -389,6 +401,7 @@ const KanbanBoard = () => {
             <CreateTaskModal
               onClose={handleCloseCreate}
               onCreate={handleCreateTask}
+              initialStatus={createTaskStatus}
             />
           )}
 
