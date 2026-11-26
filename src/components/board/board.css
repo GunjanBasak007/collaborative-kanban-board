@@ -1781,3 +1781,130 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+
+
+/* SHARE BOARD MODAL */
+
+.share-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.share-modal {
+  width: 100%;
+  max-width: 460px;
+  padding: 28px;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);
+}
+
+.share-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.share-modal-header h2 {
+  margin: 0 0 7px;
+  color: #171923;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.share-modal-header p {
+  margin: 0;
+  color: #777b8c;
+  font-size: 14px;
+}
+
+.share-close-button {
+  border: none;
+  background: transparent;
+  color: #777b8c;
+  font-size: 27px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.share-permission-info {
+  padding: 16px;
+  margin-bottom: 20px;
+  border: 1px solid #e9e7ff;
+  border-radius: 12px;
+  background: #f7f6ff;
+}
+
+.share-permission-info strong {
+  color: #5546e8;
+  font-size: 14px;
+}
+
+.share-permission-info p {
+  margin: 7px 0 0;
+  color: #66677a;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.share-generate-button {
+  width: 100%;
+  justify-content: center;
+  padding: 13px 18px;
+}
+
+.share-link-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.share-link-section label {
+  color: #333447;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.share-link-section input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #dedced;
+  border-radius: 10px;
+  outline: none;
+  color: #45445b;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.share-link-section input:focus {
+  border-color: #6555ed;
+}
+
+.share-generate-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.share-security-note {
+  margin: 17px 0 0;
+  color: #9293a1;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 480px) {
+  .share-modal {
+    padding: 21px;
+  }
+}

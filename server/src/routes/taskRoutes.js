@@ -1,5 +1,9 @@
 import { Router } from "express";
+
 import { addClient } from "../services/eventService.js";
+
+import { createShareLink } from "../controllers/shareLinkController.js";
+
 import {
   getBoard,
   createTask,
@@ -7,17 +11,33 @@ import {
   deleteTask,
 } from "../controllers/taskController.js";
 
+import {
+  resolveBoardAccess,
+  requireBoardEditor,
+  requireBoardOwner,
+} from "../middleware/resolveBoardAccess.js";
+
 const router = Router();
 
+// Resolve and validate board access for every route.
+router.use(resolveBoardAccess);
+
+// Owner-only share link creation.
+router.post(
+  "/boards/share-links",
+  requireBoardOwner,
+  createShareLink
+);
+
+// Read access: owners, viewers and editors.
 router.get("/board", getBoard);
 
-router.post("/tasks", createTask);
+// Write access: owners and guest editors.
+router.post("/tasks", requireBoardEditor, createTask);
+router.patch("/tasks/:id", requireBoardEditor, updateTask);
+router.delete("/tasks/:id", requireBoardEditor, deleteTask);
 
-router.patch("/tasks/:id", updateTask);
-
-router.delete("/tasks/:id", deleteTask);
-
-// GET /api/events
+// Board-specific real-time updates.
 router.get("/events", (req, res) => {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -28,16 +48,15 @@ router.get("/events", (req, res) => {
 
   res.write(": connected\n\n");
 
-  const removeClient = addClient(res);
+  const removeClient = addClient(res, req.board.id);
 
-  // Heartbeat to maintain the connection
   const heartbeat = setInterval(() => {
     if (!res.destroyed && !res.writableEnded) {
       res.write(": heartbeat\n\n");
     }
   }, 20000);
 
-  req.on("close", () => {
+  res.on("close", () => {
     clearInterval(heartbeat);
     removeClient();
   });

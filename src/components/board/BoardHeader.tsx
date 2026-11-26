@@ -1,15 +1,16 @@
 type BoardHeaderProps = {
   totalTasks: number;
   onCreateClick: () => void;
+  onShareClick?: () => void;
 };
 
 const BoardHeader = ({
   totalTasks,
   onCreateClick,
+  onShareClick,
 }: BoardHeaderProps) => {
   return (
     <>
-      {/* BRAND BAR */}
       <div className="brand-bar">
         <div className="brand-lockup">
           <img
@@ -24,7 +25,6 @@ const BoardHeader = ({
         </div>
       </div>
 
-      {/* BOARD HEADER */}
       <header className="board-header">
         <div>
           <span className="board-eyebrow">
@@ -44,7 +44,18 @@ const BoardHeader = ({
             {totalTasks} tasks
           </div>
 
+          {onShareClick && (
+            <button
+              type="button"
+              className="create-task-button share-board-button"
+              onClick={onShareClick}
+            >
+              Share Board
+            </button>
+          )}
+
           <button
+            type="button"
             className="create-task-button"
             onClick={onCreateClick}
           >

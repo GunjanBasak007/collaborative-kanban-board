@@ -1,8 +1,12 @@
-
 import { useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { API_BASE_URL } from "../lib/api";
+import {
+  API_BASE_URL,
+  getBoardShareToken,
+} from "../lib/api";
+
+import { supabase } from "../lib/supabase";
 
 type InteractionRef = {
   current: boolean;
@@ -20,10 +24,8 @@ export const useBoardEvents = (
   isInteractingRef: InteractionRef
 ) => {
   const queryClient = useQueryClient();
-
   const pendingRefreshRef = useRef(false);
 
-  // Process deferred events when it is safe to refresh the board.
   const flushPendingEvents = useCallback(async () => {
     if (isInteractingRef.current) return;
 
@@ -44,21 +46,28 @@ export const useBoardEvents = (
     });
   }, [queryClient, isInteractingRef]);
 
-  // Listen for database changes through SSE.
   useEffect(() => {
-    const eventSource = new EventSource(
-      `${API_BASE_URL}/api/events`
-    );
+    const controller = new AbortController();
 
-    console.log("Connecting to board SSE stream...");
+    let stopped = false;
 
-    eventSource.onopen = () => {
-      console.log("Board SSE connection established");
-    };
+    let reconnectTimer:
+      | ReturnType<typeof setTimeout>
+      | undefined;
 
-    eventSource.onmessage = (message) => {
+    let reconnectDelay = 1000;
+
+    const processEvent = (frame: string) => {
+      const data = frame
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trimStart())
+        .join("\n");
+
+      if (!data) return;
+
       try {
-        const event = JSON.parse(message.data) as BoardEvent;
+        const event = JSON.parse(data) as BoardEvent;
 
         const supportedEvents = [
           "TASK_CREATED",
@@ -70,7 +79,6 @@ export const useBoardEvents = (
 
         console.log("Received board event:", event);
 
-        // Don't refresh during a local interaction or mutation.
         if (
           isInteractingRef.current ||
           queryClient.isMutating({
@@ -78,13 +86,10 @@ export const useBoardEvents = (
           }) > 0
         ) {
           pendingRefreshRef.current = true;
-
           console.log("Board refresh deferred");
-
           return;
         }
 
-        // Fetch the authoritative board, including updated positions.
         void queryClient.invalidateQueries({
           queryKey: ["board"],
         });
@@ -93,20 +98,151 @@ export const useBoardEvents = (
       }
     };
 
-    eventSource.onerror = () => {
-      console.warn(
-        "SSE connection interrupted. Browser will attempt to reconnect."
+    const scheduleReconnect = () => {
+      if (stopped || controller.signal.aborted) return;
+
+      reconnectTimer = setTimeout(() => {
+        void connect();
+      }, reconnectDelay);
+
+      reconnectDelay = Math.min(
+        reconnectDelay * 2,
+        15000
       );
     };
 
+    const connect = async () => {
+      try {
+        const headers = new Headers({
+          Accept: "text/event-stream",
+        });
+
+        // GUEST SSE CONNECTION.
+        const shareToken = getBoardShareToken();
+
+        if (shareToken) {
+          headers.set(
+            "X-Board-Share-Token",
+            shareToken
+          );
+        } else {
+          // OWNER SSE CONNECTION.
+          const {
+            data: { session },
+            error: sessionError,
+          } = await supabase.auth.getSession();
+
+          if (sessionError) {
+            throw sessionError;
+          }
+
+          if (!session?.access_token) {
+            console.warn(
+              "No Supabase session available for SSE"
+            );
+
+            scheduleReconnect();
+            return;
+          }
+
+          headers.set(
+            "Authorization",
+            `Bearer ${session.access_token}`
+          );
+        }
+
+        console.log(
+          shareToken
+            ? "Connecting to guest board SSE stream..."
+            : "Connecting to authenticated board SSE stream..."
+        );
+
+        const response = await fetch(
+          `${API_BASE_URL}/api/events`,
+          {
+            method: "GET",
+            headers,
+            signal: controller.signal,
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `SSE request failed: ${response.status}`
+          );
+        }
+
+        if (!response.body) {
+          throw new Error(
+            "SSE response body is unavailable"
+          );
+        }
+
+        console.log("Board SSE connection established");
+
+        reconnectDelay = 1000;
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        let buffer = "";
+
+        while (!stopped) {
+          const { value, done } = await reader.read();
+
+          if (done) break;
+
+          buffer += decoder.decode(value, {
+            stream: true,
+          });
+
+          // Process complete SSE frames.
+          let boundary = buffer.indexOf("\n\n");
+
+          while (boundary !== -1) {
+            const frame = buffer.slice(0, boundary);
+
+            buffer = buffer.slice(boundary + 2);
+
+            processEvent(frame);
+
+            boundary = buffer.indexOf("\n\n");
+          }
+        }
+
+        await reader.cancel().catch(() => {});
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.name === "AbortError"
+        ) {
+          return;
+        }
+
+        console.warn(
+          "SSE connection interrupted:",
+          error
+        );
+      }
+
+      scheduleReconnect();
+    };
+
+    void connect();
+
     return () => {
+      stopped = true;
+      controller.abort();
+
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
+
       console.log("Closing board SSE connection");
-      eventSource.close();
     };
   }, [queryClient, isInteractingRef]);
 
-  // Watch for mutations finishing.
-  // If an SSE refresh was deferred, process it now.
+  // Process queued refreshes after mutations finish.
   useEffect(() => {
     const unsubscribe = queryClient
       .getMutationCache()

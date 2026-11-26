@@ -1,4 +1,3 @@
-
 import { pool } from "../db/pool.js";
 import { broadcastEvent } from "../services/eventService.js";
 
@@ -14,6 +13,8 @@ const VALID_PRIORITIES = ["low", "medium", "high"];
 // GET /api/board
 export const getBoard = async (req, res) => {
   try {
+    const boardId = req.board.id;
+
     const query = `
       SELECT
         id,
@@ -25,6 +26,7 @@ export const getBoard = async (req, res) => {
         position,
         updated_at AS "updatedAt"
       FROM tasks
+      WHERE board_id = $1
       ORDER BY
         CASE status
           WHEN 'Backlog' THEN 1
@@ -35,7 +37,7 @@ export const getBoard = async (req, res) => {
         position ASC;
     `;
 
-    const result = await pool.query(query);
+    const result = await pool.query(query, [boardId]);
 
     res.status(200).json(result.rows);
   } catch (error) {
@@ -57,7 +59,7 @@ export const createTask = async (req, res) => {
     status = "Backlog",
   } = req.body ?? {};
 
-  // Validate request
+  // Validate request.
   if (
     typeof title !== "string" ||
     !title.trim() ||
@@ -79,6 +81,7 @@ export const createTask = async (req, res) => {
     });
   }
 
+  const boardId = req.board.id;
   let client;
 
   try {
@@ -87,23 +90,22 @@ export const createTask = async (req, res) => {
     await client.query("BEGIN");
 
     // Serialize task mutations to maintain consistent positions.
-    await client.query(
-      "LOCK TABLE tasks IN SHARE ROW EXCLUSIVE MODE"
-    );
+    await client.query("LOCK TABLE tasks IN SHARE ROW EXCLUSIVE MODE");
 
-    // Calculate the next position in this column.
+    // Calculate the next position in this board's column.
     const positionResult = await client.query(
       `SELECT COALESCE(MAX(position), -1) + 1 AS position
        FROM tasks
-       WHERE status = $1`,
-      [status]
+       WHERE board_id = $1 AND status = $2`,
+      [boardId, status]
     );
 
     const position = Number(positionResult.rows[0].position);
 
-    // Insert the new task.
+    // Insert the task into the current board.
     const result = await client.query(
       `INSERT INTO tasks (
+        board_id,
         title,
         description,
         priority,
@@ -111,7 +113,7 @@ export const createTask = async (req, res) => {
         status,
         position
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING
         id,
         title,
@@ -122,6 +124,7 @@ export const createTask = async (req, res) => {
         position,
         updated_at AS "updatedAt"`,
       [
+        boardId,
         title.trim(),
         description,
         priority,
@@ -133,14 +136,13 @@ export const createTask = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // Broadcast only after successful database commit.
-    broadcastEvent({
+    // Broadcast only to clients connected to this board, after commit.
+    broadcastEvent(boardId, {
       type: "TASK_CREATED",
       task: result.rows[0],
     });
 
-    res.status(201).json(result.rows[0]);
-
+    return res.status(201).json(result.rows[0]);
   } catch (error) {
     if (client) {
       await client.query("ROLLBACK").catch(() => {});
@@ -148,16 +150,15 @@ export const createTask = async (req, res) => {
 
     console.error("Error creating task:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to create task",
     });
-
   } finally {
     client?.release();
   }
 };
 
-// Validate UUID
+// Validate UUID.
 const isUUID = (value) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value
@@ -259,6 +260,7 @@ export const updateTask = async (req, res) => {
     });
   }
 
+  const boardId = req.board.id;
   let client;
 
   try {
@@ -267,11 +269,9 @@ export const updateTask = async (req, res) => {
     await client.query("BEGIN");
 
     // Serialize task mutations to preserve column ordering.
-    await client.query(
-      "LOCK TABLE tasks IN SHARE ROW EXCLUSIVE MODE"
-    );
+    await client.query("LOCK TABLE tasks IN SHARE ROW EXCLUSIVE MODE");
 
-    // Find and lock the task.
+    // Find and lock this task only if it belongs to the current board.
     const taskResult = await client.query(
       `SELECT
         id,
@@ -283,9 +283,9 @@ export const updateTask = async (req, res) => {
         position,
         updated_at AS "updatedAt"
        FROM tasks
-       WHERE id = $1
+       WHERE board_id = $1 AND id = $2
        FOR UPDATE`,
-      [id]
+      [boardId, id]
     );
 
     if (taskResult.rows.length === 0) {
@@ -328,7 +328,7 @@ export const updateTask = async (req, res) => {
              priority = $3,
              assignee = $4,
              updated_at = NOW()
-         WHERE id = $5
+         WHERE id = $5 AND board_id = $6
          RETURNING
            id,
            title,
@@ -344,29 +344,31 @@ export const updateTask = async (req, res) => {
           updated.priority,
           updated.assignee,
           id,
+          boardId,
         ]
       );
 
       updatedTask = result.rows[0];
-
     } else {
-      // Fetch remaining tasks in the source column.
+      // Fetch remaining tasks in this board's source column.
       const sourceResult = await client.query(
         `SELECT id, position
          FROM tasks
-         WHERE status = $1 AND id <> $2
+         WHERE board_id = $1
+           AND status = $2
+           AND id <> $3
          ORDER BY position ASC, id ASC`,
-        [current.status, id]
+        [boardId, current.status, id]
       );
 
-      // Fetch tasks in the destination column.
+      // Fetch tasks in this board's destination column.
       const destinationResult = statusChanged
         ? await client.query(
             `SELECT id, position
              FROM tasks
-             WHERE status = $1
+             WHERE board_id = $1 AND status = $2
              ORDER BY position ASC, id ASC`,
-            [updated.status]
+            [boardId, updated.status]
           )
         : sourceResult;
 
@@ -389,7 +391,7 @@ export const updateTask = async (req, res) => {
         id: current.id,
       });
 
-      // Compact the source column after cross-column movement.
+      // Compact this board's source column after cross-column movement.
       if (statusChanged) {
         for (let index = 0; index < sourceResult.rows.length; index++) {
           const task = sourceResult.rows[index];
@@ -398,14 +400,14 @@ export const updateTask = async (req, res) => {
             await client.query(
               `UPDATE tasks
                SET position = $1, updated_at = NOW()
-               WHERE id = $2`,
-              [index, task.id]
+               WHERE id = $2 AND board_id = $3`,
+              [index, task.id, boardId]
             );
           }
         }
       }
 
-      // Update destination ordering.
+      // Update ordering in the destination column for this board.
       for (let index = 0; index < destinationTasks.length; index++) {
         const task = destinationTasks[index];
 
@@ -419,7 +421,7 @@ export const updateTask = async (req, res) => {
                  status = $5,
                  position = $6,
                  updated_at = NOW()
-             WHERE id = $7
+             WHERE id = $7 AND board_id = $8
              RETURNING
                id,
                title,
@@ -437,17 +439,17 @@ export const updateTask = async (req, res) => {
               updated.status,
               index,
               id,
+              boardId,
             ]
           );
 
           updatedTask = result.rows[0];
-
         } else if (Number(task.position) !== index) {
           await client.query(
             `UPDATE tasks
              SET position = $1, updated_at = NOW()
-             WHERE id = $2`,
-            [index, task.id]
+             WHERE id = $2 AND board_id = $3`,
+            [index, task.id, boardId]
           );
         }
       }
@@ -455,14 +457,13 @@ export const updateTask = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // Broadcast update after successful database commit.
-    broadcastEvent({
+    // Broadcast only to clients connected to this board, after commit.
+    broadcastEvent(boardId, {
       type: "TASK_UPDATED",
       task: updatedTask,
     });
 
     return res.status(200).json(updatedTask);
-
   } catch (error) {
     if (client) {
       await client.query("ROLLBACK").catch(() => {});
@@ -473,7 +474,6 @@ export const updateTask = async (req, res) => {
     return res.status(500).json({
       message: "Failed to update task",
     });
-
   } finally {
     client?.release();
   }
@@ -489,6 +489,7 @@ export const deleteTask = async (req, res) => {
     });
   }
 
+  const boardId = req.board.id;
   let client;
 
   try {
@@ -497,17 +498,15 @@ export const deleteTask = async (req, res) => {
     await client.query("BEGIN");
 
     // Serialize task mutations.
-    await client.query(
-      "LOCK TABLE tasks IN SHARE ROW EXCLUSIVE MODE"
-    );
+    await client.query("LOCK TABLE tasks IN SHARE ROW EXCLUSIVE MODE");
 
-    // Find task before deleting.
+    // Find task before deleting, scoped to this board.
     const taskResult = await client.query(
       `SELECT id, status
        FROM tasks
-       WHERE id = $1
+       WHERE board_id = $1 AND id = $2
        FOR UPDATE`,
-      [id]
+      [boardId, id]
     );
 
     if (taskResult.rows.length === 0) {
@@ -520,13 +519,13 @@ export const deleteTask = async (req, res) => {
 
     const status = taskResult.rows[0].status;
 
-    // Delete task.
+    // Delete only the task belonging to this board.
     await client.query(
-      "DELETE FROM tasks WHERE id = $1",
-      [id]
+      "DELETE FROM tasks WHERE id = $1 AND board_id = $2",
+      [id, boardId]
     );
 
-    // Recalculate positions of remaining tasks.
+    // Recalculate positions only for this board's remaining tasks.
     await client.query(
       `WITH ordered_tasks AS (
         SELECT
@@ -535,7 +534,7 @@ export const deleteTask = async (req, res) => {
             ORDER BY position ASC, id ASC
           ) - 1 AS new_position
         FROM tasks
-        WHERE status = $1
+        WHERE board_id = $1 AND status = $2
       )
       UPDATE tasks AS t
       SET
@@ -543,14 +542,15 @@ export const deleteTask = async (req, res) => {
         updated_at = NOW()
       FROM ordered_tasks
       WHERE t.id = ordered_tasks.id
+        AND t.board_id = $1
         AND t.position <> ordered_tasks.new_position`,
-      [status]
+      [boardId, status]
     );
 
     await client.query("COMMIT");
 
-    // Broadcast deletion after successful database commit.
-    broadcastEvent({
+    // Broadcast only to clients connected to this board, after commit.
+    broadcastEvent(boardId, {
       type: "TASK_DELETED",
       taskId: id,
     });
@@ -559,7 +559,6 @@ export const deleteTask = async (req, res) => {
       message: "Task deleted successfully",
       deletedTaskId: id,
     });
-
   } catch (error) {
     if (client) {
       await client.query("ROLLBACK").catch(() => {});
@@ -570,7 +569,6 @@ export const deleteTask = async (req, res) => {
     return res.status(500).json({
       message: "Failed to delete task",
     });
-
   } finally {
     client?.release();
   }

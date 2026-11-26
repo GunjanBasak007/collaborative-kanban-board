@@ -1,4 +1,3 @@
-
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { DragDropProvider } from "@dnd-kit/react";
@@ -18,6 +17,13 @@ import {
   type Task,
   type TaskStatus,
 } from "../../types/task";
+
+import {
+  API_BASE_URL,
+  getBoardShareToken,
+} from "../../lib/api";
+
+import { supabase } from "../../lib/supabase";
 
 import KanbanColumn from "./KanbanColumn";
 import BoardHeader from "./BoardHeader";
@@ -58,15 +64,18 @@ const flattenTasks = (grouped: GroupedTasks): Task[] => {
 const KanbanBoard = () => {
   const queryClient = useQueryClient();
 
+  // Detect guest access through a share URL.
+  const isGuestBoard = Boolean(getBoardShareToken());
+
   const dragSnapshot = useRef<Task[]>([]);
 
-  // Track active local interactions
+  // Track active local interactions.
   const isInteractingRef = useRef(false);
 
-  // REAL-TIME SSE LISTENER
+  // REAL-TIME SSE LISTENER.
   const { flushPendingEvents } = useBoardEvents(isInteractingRef);
 
-  // FETCH BOARD
+  // FETCH BOARD.
   const {
     data: tasks = [],
     isLoading,
@@ -74,12 +83,12 @@ const KanbanBoard = () => {
     error,
   } = useBoard();
 
-  // API MUTATIONS
+  // API MUTATIONS.
   const createTaskMutation = useCreateTask();
   const updateTaskMutation = useUpdateTask();
   const deleteTaskMutation = useDeleteTask();
 
-  // URL-SYNCHRONIZED FILTERS
+  // URL-SYNCHRONIZED FILTERS.
   const {
     filters,
     setSearch,
@@ -87,15 +96,23 @@ const KanbanBoard = () => {
     setAssignee,
   } = useBoardFilters();
 
-  // LOCAL UI STATE
+  // LOCAL UI STATE.
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-  // Default status for task creation
+  // Default status for task creation.
   const [createTaskStatus, setCreateTaskStatus] =
     useState<TaskStatus>("Backlog");
 
-  // OPEN CREATE MODAL WITH SELECTED COLUMN STATUS
+  // SHARE MODAL STATE.
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isGeneratingShareLink, setIsGeneratingShareLink] =
+    useState(false);
+  const [shareLink, setShareLink] = useState("");
+  const [shareError, setShareError] = useState("");
+  const [copySuccess, setCopySuccess] = useState(false);
+
+  // OPEN CREATE MODAL WITH SELECTED COLUMN STATUS.
   const openCreateModal = (
     status: TaskStatus = "Backlog"
   ) => {
@@ -104,7 +121,93 @@ const KanbanBoard = () => {
     setIsCreateModalOpen(true);
   };
 
-  // FILTER TASKS
+  // OPEN SHARE MODAL.
+  const handleOpenShare = () => {
+    if (isGuestBoard) return;
+
+    setShareLink("");
+    setShareError("");
+    setCopySuccess(false);
+    setIsShareModalOpen(true);
+  };
+
+  // GENERATE SHARE LINK.
+  const handleGenerateShareLink = async () => {
+    try {
+      setIsGeneratingShareLink(true);
+      setShareError("");
+      setCopySuccess(false);
+
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw new Error(
+          "Unable to retrieve your authentication session"
+        );
+      }
+
+      if (!session?.access_token) {
+        throw new Error("Please sign in again");
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/boards/share-links`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message || "Failed to generate share link"
+        );
+      }
+
+      if (!data?.shareToken) {
+        throw new Error(
+          "Server did not return a share token"
+        );
+      }
+
+      const generatedLink =
+        `${window.location.origin}/share/${data.shareToken}`;
+
+      setShareLink(generatedLink);
+    } catch (error) {
+      setShareError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while generating the link"
+      );
+    } finally {
+      setIsGeneratingShareLink(false);
+    }
+  };
+
+  // COPY SHARE LINK.
+  const handleCopyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setCopySuccess(true);
+      setShareError("");
+    } catch {
+      setCopySuccess(false);
+      setShareError(
+        "Unable to copy automatically. Please select and copy the link manually."
+      );
+    }
+  };
+
+  // FILTER TASKS.
   const filteredTasks = tasks.filter((task) => {
     const matchesSearch = task.title
       .toLowerCase()
@@ -121,18 +224,18 @@ const KanbanBoard = () => {
     return matchesSearch && matchesPriority && matchesAssignee;
   });
 
-  // GET UNIQUE ASSIGNEES
+  // GET UNIQUE ASSIGNEES.
   const assignees = [
     ...new Set(tasks.map((task) => task.assignee)),
   ].sort((a, b) => a.localeCompare(b));
 
-  // CHECK ACTIVE FILTERS
+  // CHECK ACTIVE FILTERS.
   const isFiltering =
     filters.search.trim() !== "" ||
     filters.priority !== "all" ||
     filters.assignee !== "all";
 
-  // CREATE TASK
+  // CREATE TASK.
   const handleCreateTask = (
     input: Omit<Task, "id" | "position" | "updatedAt">
   ) => {
@@ -144,7 +247,7 @@ const KanbanBoard = () => {
     void flushPendingEvents();
   };
 
-  // UPDATE TASK
+  // UPDATE TASK.
   const handleUpdateTask = (
     taskId: string,
     updates: EditableTaskFields
@@ -160,7 +263,7 @@ const KanbanBoard = () => {
     void flushPendingEvents();
   };
 
-  // DELETE TASK
+  // DELETE TASK.
   const handleDeleteTask = (taskId: string) => {
     deleteTaskMutation.mutate(taskId);
 
@@ -170,7 +273,7 @@ const KanbanBoard = () => {
     void flushPendingEvents();
   };
 
-  // CLOSE DETAILS MODAL
+  // CLOSE DETAILS MODAL.
   const handleCloseDetails = () => {
     setSelectedTask(null);
     isInteractingRef.current = false;
@@ -178,7 +281,7 @@ const KanbanBoard = () => {
     void flushPendingEvents();
   };
 
-  // CLOSE CREATE MODAL
+  // CLOSE CREATE MODAL.
   const handleCloseCreate = () => {
     setIsCreateModalOpen(false);
     isInteractingRef.current = false;
@@ -186,12 +289,12 @@ const KanbanBoard = () => {
     void flushPendingEvents();
   };
 
-  // LOADING STATE
+  // LOADING STATE.
   if (isLoading) {
     return <div className="board-message">Loading board...</div>;
   }
 
-  // ERROR STATE
+  // ERROR STATE.
   if (isError) {
     return (
       <div className="board-message error">
@@ -202,7 +305,7 @@ const KanbanBoard = () => {
 
   return (
     <DragDropProvider
-      // DRAG START
+      // DRAG START.
       onDragStart={() => {
         if (isFiltering) return;
 
@@ -216,7 +319,7 @@ const KanbanBoard = () => {
         }));
       }}
 
-      // DRAG OVER: IMMEDIATE UI UPDATE
+      // DRAG OVER: IMMEDIATE UI UPDATE.
       onDragOver={(event) => {
         if (isFiltering) return;
 
@@ -242,7 +345,7 @@ const KanbanBoard = () => {
         );
       }}
 
-      // DRAG END: PERSIST STATUS AND POSITION
+      // DRAG END: PERSIST STATUS AND POSITION.
       onDragEnd={async (event) => {
         if (isFiltering) {
           dragSnapshot.current = [];
@@ -287,7 +390,7 @@ const KanbanBoard = () => {
           return;
         }
 
-        // No actual movement
+        // NO ACTUAL MOVEMENT.
         if (
           movedTask.status === originalTask.status &&
           movedTask.position === originalTask.position
@@ -300,7 +403,7 @@ const KanbanBoard = () => {
         }
 
         try {
-          // Persist final position through PATCH
+          // Persist final position through PATCH.
           await updateTaskMutation.mutateAsync({
             taskId,
             updates: {
@@ -309,9 +412,12 @@ const KanbanBoard = () => {
             },
           });
         } catch (error) {
-          console.error("Failed to persist task movement:", error);
+          console.error(
+            "Failed to persist task movement:",
+            error
+          );
 
-          // Restore original board and reconcile with database
+          // Restore original board and reconcile with database.
           queryClient.setQueryData<Task[]>(
             ["board"],
             dragSnapshot.current
@@ -335,7 +441,104 @@ const KanbanBoard = () => {
           <BoardHeader
             totalTasks={tasks.length}
             onCreateClick={() => openCreateModal("Backlog")}
+            onShareClick={
+              isGuestBoard ? undefined : handleOpenShare
+            }
           />
+
+          {/* SHARE BOARD MODAL */}
+          {isShareModalOpen && !isGuestBoard && (
+            <div
+              className="share-modal-overlay"
+              onClick={() => setIsShareModalOpen(false)}
+            >
+              <div
+                className="share-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="share-modal-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="share-modal-header">
+                  <div>
+                    <h2 id="share-modal-title">
+                      Share your board
+                    </h2>
+
+                    <p>
+                      Invite others to collaborate with you.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="share-close-button"
+                    onClick={() => setIsShareModalOpen(false)}
+                    aria-label="Close share dialog"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="share-permission-info">
+                  <strong>Editor access</strong>
+
+                  <p>
+                    Anyone with this link can view, create,
+                    update, move and delete tasks on your board.
+                  </p>
+                </div>
+
+                {!shareLink ? (
+                  <button
+                    type="button"
+                    className="create-task-button share-generate-button"
+                    onClick={handleGenerateShareLink}
+                    disabled={isGeneratingShareLink}
+                  >
+                    {isGeneratingShareLink
+                      ? "Generating..."
+                      : "Generate share link"}
+                  </button>
+                ) : (
+                  <div className="share-link-section">
+                    <label htmlFor="generated-share-link">
+                      Your shareable link
+                    </label>
+
+                    <input
+                      id="generated-share-link"
+                      type="text"
+                      value={shareLink}
+                      readOnly
+                      onFocus={(event) =>
+                        event.currentTarget.select()
+                      }
+                    />
+
+                    <button
+                      type="button"
+                      className="create-task-button share-generate-button"
+                      onClick={handleCopyShareLink}
+                    >
+                      {copySuccess ? "Copied!" : "Copy link"}
+                    </button>
+                  </div>
+                )}
+
+                {shareError && (
+                  <p className="api-error" role="alert">
+                    {shareError}
+                  </p>
+                )}
+
+                <p className="share-security-note">
+                  Keep this link private. Anyone who has it can
+                  access your board with the permission shown above.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* SEARCH AND FILTERS */}
           <BoardFilters
