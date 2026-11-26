@@ -10,60 +10,44 @@ const BoardHeader = ({
   onShareClick,
 }: BoardHeaderProps) => {
   return (
-    <>
-      <div className="brand-bar">
-        <div className="brand-lockup">
-          <img
-            src="/favicon.svg"
-            alt="KanbanFlow logo"
-            className="brand-mark"
-          />
+    <header className="board-header">
+      <div>
+        <span className="board-eyebrow">
+          PROJECT MANAGEMENT
+        </span>
 
-          <span className="brand-wordmark">
-            Kanban<span>Flow</span>
-          </span>
-        </div>
+        <h1>My Kanban Board</h1>
+
+        <p>
+          Organize your work, collaborate in real time,
+          and track your progress.
+        </p>
       </div>
 
-      <header className="board-header">
-        <div>
-          <span className="board-eyebrow">
-            PROJECT MANAGEMENT
-          </span>
-
-          <h1>My Kanban Board</h1>
-
-          <p>
-            Organize your work, collaborate in real time,
-            and track your progress.
-          </p>
+      <div className="header-actions">
+        <div className="board-total">
+          {totalTasks} tasks
         </div>
 
-        <div className="header-actions">
-          <div className="board-total">
-            {totalTasks} tasks
-          </div>
-
-          {onShareClick && (
-            <button
-              type="button"
-              className="create-task-button share-board-button"
-              onClick={onShareClick}
-            >
-              Share Board
-            </button>
-          )}
-
+        {onShareClick && (
           <button
             type="button"
-            className="create-task-button"
-            onClick={onCreateClick}
+            className="create-task-button share-board-button"
+            onClick={onShareClick}
           >
-            + Create Task
+            Share Board
           </button>
-        </div>
-      </header>
-    </>
+        )}
+
+        <button
+          type="button"
+          className="create-task-button"
+          onClick={onCreateClick}
+        >
+          + Create Task
+        </button>
+      </div>
+    </header>
   );
 };
 

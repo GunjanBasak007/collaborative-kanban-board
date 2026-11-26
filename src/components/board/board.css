@@ -1908,3 +1908,142 @@
     padding: 21px;
   }
 }
+
+
+
+/* =====================================
+   UNIFIED APPLICATION TOP BAR
+===================================== */
+
+.app-topbar {
+  width: 100%;
+  background: #ffffff;
+  position: relative;
+  z-index: 20;
+  border-bottom: 1px solid #f0eef8;
+}
+
+.app-topbar-inner {
+  width: 100%;
+  max-width: 1600px;
+  min-height: 90px;
+  margin: 0 auto;
+  padding: 18px 42px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+
+  box-sizing: border-box;
+}
+
+/* BRAND */
+
+.app-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.app-topbar-brand .brand-mark {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.app-topbar-brand .brand-wordmark {
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: #171923;
+  white-space: nowrap;
+}
+
+.app-topbar-brand .brand-wordmark span {
+  color: #7354ef;
+}
+
+/* ACCOUNT ACTIONS */
+
+.app-account-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20px;
+}
+
+.app-account-label {
+  color: #77758e;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.app-account-label strong {
+  color: #41366f;
+  font-weight: 700;
+}
+
+.app-signout-button {
+  padding: 10px 20px;
+  border: 1px solid #e3defc;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #6548e9;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.app-signout-button:hover {
+  background: #f6f3ff;
+  border-color: #bdb0ff;
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 640px) {
+  .app-topbar-inner {
+    min-height: 76px;
+    padding: 14px 18px;
+    gap: 12px;
+  }
+
+  .app-topbar-brand {
+    gap: 8px;
+  }
+
+  .app-topbar-brand .brand-mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  .app-topbar-brand .brand-wordmark {
+    font-size: 20px;
+  }
+
+  .app-account-actions {
+    gap: 8px;
+  }
+
+  .app-account-label {
+    font-size: 11px;
+  }
+
+  .app-signout-button {
+    padding: 8px 11px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-account-label {
+    max-width: 125px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
